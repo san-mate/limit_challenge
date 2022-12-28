@@ -1,9 +1,15 @@
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 from django.test import TestCase, Client
+from django.core.exceptions import RequestAborted
 
 
 TEST_DIR = Path(__file__).parent / Path('test_files')
+
+
+def raise_error(f):
+    raise RequestAborted("Upload Timeout")
 
 
 class XMLConversionTestCase(TestCase):
@@ -57,3 +63,13 @@ class XMLConversionTestCase(TestCase):
                     },
                 ],
             })
+
+    @patch("xml_converter.api.xml_file_to_json", side_effect=raise_error)
+    def test_request_failure(self, mock_xml_to_json):
+        with (TEST_DIR / Path('addresses.xml')).open() as fp:
+            response = self.client.post('/api/converter/convert/', {
+                'file': fp,
+            })
+            mock_xml_to_json.assert_called_once()
+            self.assertEqual(response.status_code, 500)
+            self.assertEqual(response.json(), {'error': 'Upload Timeout'})
